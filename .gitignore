@@ -1,9 +1,10 @@
 #Intelli
 .idea
-.iml
+*.iml
 
 #Java
 .class
+target
 
 ### Eclipse ###
 .metadata

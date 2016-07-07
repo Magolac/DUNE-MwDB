@@ -1,0 +1,4 @@
+timestamp,eventType,viewId
+1001,onClick,id10
+1002,onClick,id11
+1003,onClick,id12
