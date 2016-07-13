@@ -1,6 +1,5 @@
 package fr.spirals.snt.dune.mwdb;
 
-import org.mwg.Callback;
 import org.mwg.Type;
 import org.mwg.importer.ImporterActions;
 import org.mwg.task.Task;
@@ -94,25 +93,15 @@ public class Importer {
                         .setVar("currentTime","{{=currentTime + res}}")
 
                 )
-                .then(taskContext -> {
-                    int counter = Integer.parseInt((String) taskContext.variable("currentTime"));
-
-                    Execution execution = (Execution) taskContext.variable("executionNode");
-
-                    execution.jump(counter, new Callback<Execution>() {
-                        @Override
-                        public void on(Execution jumped) {
-                            Metrics metrics = jumped.getTimeframe()[0];
-                            metrics.jump(counter, new Callback<Metrics>() {
-                                @Override
-                                public void on(Metrics future) {
-                                    future.setTimeframe(-1.);
-                                    taskContext.setResult(null);
-                                }
-                            });
-                        }
-                    });
-                })
+                .fromVar("executionNode")
+                .jump("{{currentTime}}")
+                //todo fix
+                .setTime("{{currentTime}}")
+                .traverse(Execution.TIMEFRAME)
+                .asVar("metrics")
+                .fromVar("metrics")
+                .jump("{{currentTime}}")
+                .setProperty(Metrics.TIMEFRAME,Type.DOUBLE,"-1.")
                 .setVar("currentTime",null)
                 .setVar("isFirst",null);
 
@@ -222,25 +211,6 @@ public class Importer {
             }
             System.out.println();
         }
-
-        /*duneModel.graph().lookup(0, 0, n.id(), new Callback<Node>() {
-            @Override
-            public void on(Node result) {
-                System.out.println(result.getClass());
-            }
-        });*/
-
-//        setVar("toto",duneModel.newContext(0,0))
-//                .then(context -> context.setResult(null))
-//                .print("{{= 1000 + 12}}")
-//                .fromVar("toto")
-//                .print("{{result}}")
-//                .execute(duneModel.graph(),null);
-
-
-
-
-
 
     }
 
