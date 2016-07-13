@@ -46,69 +46,75 @@ public class Importer {
                         selectObject(line -> !((String)line).startsWith("device")  && !((String)line).isEmpty())
                                 .foreach(
                                         split(",")
-                                                .then(taskContext -> {
-                                                    String[] res = taskContext.resultAsStringArray();
-                                                    Context executionCtxt = duneModel.newContext(0,0);
-                                                    executionCtxt.setDevice(res[0]);
-                                                    executionCtxt.setSdk_version(res[1]);
-                                                    executionCtxt.setApi_level(res[2]);
-                                                    executionCtxt.setScreen_res(res[3]);
-                                                    executionCtxt.setCpu_abi(res[4]);
-                                                    executionCtxt.setNet_type(res[5]);
-                                                    taskContext.setResult(executionCtxt);
-                                                })
+                                                .asVar("res")
+                                                .newTypedNode(Context.NODE_NAME)
+                                                .setProperty(Context.DEVICE,Type.STRING,"{{res[0]}}")
+                                                .setProperty(Context.SDK_VERSION,Type.STRING,"{{res[1]}}")
+                                                .setProperty(Context.API_LEVEL,Type.STRING,"{{res[2]}}")
+                                                .setProperty(Context.SCREEN_RES,Type.STRING,"{{res[3]}}")
+                                                .setProperty(Context.CPU_API,Type.STRING,"{{res[4]}}")
+                                                .setProperty(Context.NET_TYPE,Type.STRING,"{{res[5]}}")
                                                 .asVar("taskContext")
                                                 .fromVar("executionNode")
                                                 .add(Execution.CONTEXT,"taskContext")
                                                 .setVar("taskContext",null)
                                 )
-                )
-                .;
+                );
 
         metricsImporter
                 .setTime("{{startTime}}")
                 .setVar("isFirst",true)
-                .setVar("counter","{{startTime}}")
+                .setVar("currentTime","{{startTime}}")
                 .action(ImporterActions.READLINES,"{{path}}")
                 .selectObject(line -> !((String)line).startsWith("timeFrame") && !((String)line).isEmpty())
-                        .foreach(
-                                then(taskContext -> {
-                                    String res = taskContext.resultAsString();
-                                    boolean isFirst = (boolean) taskContext.variable("isFirst");
-                                    int counter = Integer.parseInt((String) taskContext.variable("counter"));
+                .foreach(
+                        asVar("res")
+                        .ifThen(context -> !((boolean)context.variable("isFirst")),
+                                print("else")
+                                .fromVar("executionNode")
+                                        .jump("{{currentTime}}")
+                                        //todo fix
+                                        .setTime("{{currentTime}}")
+                                        .traverse(Execution.TIMEFRAME)
+                                        .asVar("metrics")
+                                        .fromVar("metrics")
+                                        .jump("{{currentTime}}")
+                                        .setProperty(Metrics.TIMEFRAME,Type.DOUBLE,"{{res}}")
+                                )
+                        .ifThen(context -> (boolean)context.variable("isFirst"),
+                                setVar("isFirst",false)
+                                        .setTime("{{currentTime}}")
+                                        .newTypedNode(Metrics.NODE_NAME)
+                                        .setProperty(Metrics.TIMEFRAME,Type.DOUBLE,"{{res}}")
+                                        .asVar("metric")
+                                        .fromVar("executionNode")
+                                        .jump("{{currentTime}}")
+                                        .add(Execution.TIMEFRAME,"metric")
+                        )
+                        .setVar("currentTime","{{=currentTime + res}}")
 
-                                    Execution execution = (Execution) taskContext.variable("executionNode");
-                                    if(isFirst) {
-                                        taskContext.setVariable("isFirst",false);
-                                        Metrics metrics = duneModel.newMetrics(0,counter);
-                                        metrics.setTimeframe(Double.valueOf(res));
-                                        execution.jump(counter, new Callback<Execution>() {
-                                            @Override
-                                            public void on(Execution jumped) {
-                                                jumped.addToTimeframe(metrics);
-                                            }
-                                        });
+                )
+                .then(taskContext -> {
+                    int counter = Integer.parseInt((String) taskContext.variable("currentTime"));
 
-                                    } else {
-                                        execution.jump(counter, new Callback<Execution>() {
-                                            @Override
-                                            public void on(Execution jumped) {
-                                                Metrics metrics = jumped.getTimeframe()[0];
-                                                metrics.jump(counter, new Callback<Metrics>() {
-                                                    @Override
-                                                    public void on(Metrics future) {
-                                                        future.setTimeframe(Double.valueOf(res));
-                                                    }
-                                                });
-                                            }
-                                        });
+                    Execution execution = (Execution) taskContext.variable("executionNode");
 
-                                    }
-
-                                    taskContext.setVariable("counter",counter + Integer.parseInt(res) + "");
+                    execution.jump(counter, new Callback<Execution>() {
+                        @Override
+                        public void on(Execution jumped) {
+                            Metrics metrics = jumped.getTimeframe()[0];
+                            metrics.jump(counter, new Callback<Metrics>() {
+                                @Override
+                                public void on(Metrics future) {
+                                    future.setTimeframe(-1.);
                                     taskContext.setResult(null);
-                                })
-                        );
+                                }
+                            });
+                        }
+                    });
+                })
+                .setVar("currentTime",null)
+                .setVar("isFirst",null);
 
         timerangeImporter
                 .action(ImporterActions.READLINES,"{{path}}")
@@ -130,25 +136,34 @@ public class Importer {
 
         userinputImporter
                 .action(ImporterActions.READLINES,"{{path}}")
-                .foreach(selectObject(oLine -> !((String)oLine).startsWith("timestamp") && !((String)oLine).isEmpty())
-                            .foreach(
-                                    split(",")
-                                            /*.then(taskContext -> {
-                                                String[] res = taskContext.resultAsStringArray();
-                                                UserInput userInput = duneModel.newUserinput(0,Long.valueOf(res[0]));
-                                                userInput.setEventtype(res[1]);
-                                                userInput.setViewid(res[2]);
-                                                taskContext.setResult(userInput);
-                                            })*/
-                                            .asVar("res")
-                                            .newTypedNode(UserInput.NODE_NAME)
-                                            .setProperty(UserInput.EVENTTYPE,Type.STRING,"{{res[1]}}")
-                                            .setProperty(UserInput.VIEWID,Type.STRING,"{{res[2]}}")
-                                            .asVar("userInput")
-                                            .fromVar("executionNode")
-                                            .add(Execution.USERINPUT,"userInput")
-                            )
+                .selectObject(oLine -> !((String)oLine).startsWith("timestamp") && !((String)oLine).isEmpty())
+                .foreach(
+                        split(",")
+                                .asVar("res")
+                                .fromVar("executionNode")
+                                .jump("{{res[0]}}")
+                                //todo fix
+                                .setTime("{{res[0]}}")
+                                .traverse(Execution.USERINPUT)
+                                .asVar("userInputs")
+                                .ifThen(context -> ((Object[])context.variable("userInputs")).length  == 0,
+                                        setTime("{{res[0]}}")
+                                                .newTypedNode(UserInput.NODE_NAME)
+                                                .asVar("userInput"))
+                                .ifThen(context -> ((Object[])context.variable("userInputs")).length  == 1,
+                                        fromVar("{{userInputs[0]}}")
+                                                .jump("{{res[0]}}")
+                                                .asVar("userInput"))
+                                .fromVar("userInput")
+                                .setProperty(UserInput.EVENTTYPE,Type.STRING,"{{res[1]}}")
+                                .setProperty(UserInput.VIEWID,Type.STRING,"{{res[2]}}")
+                                .fromVar("executionNode")
+                                .jump("{{res[0]}}")
+                                .add(Execution.USERINPUT,"userInput")
+                                .setVar("res",null)
+                                .setVar("userInput",null)
                 );
+
 
 
 
@@ -215,8 +230,14 @@ public class Importer {
             }
         });*/
 
-//        print("{{= 1000 + 12}}")
+//        setVar("toto",duneModel.newContext(0,0))
+//                .then(context -> context.setResult(null))
+//                .print("{{= 1000 + 12}}")
+//                .fromVar("toto")
+//                .print("{{result}}")
 //                .execute(duneModel.graph(),null);
+
+
 
 
 

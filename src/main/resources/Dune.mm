@@ -18,7 +18,7 @@ class fr.spirals.snt.dune.mwdb.Context {
     att sdk_version : String
     att api_level : String
     att screen_res : String
-    att cpu_abi : String
+    att cpu_api : String
     att net_type : String
 }
 
