@@ -11,8 +11,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <mwdb.version>6-SNAPSHOT</mwdb.version>
-        <kmf.version>6-SNAPSHOT</kmf.version>
+        <mwdb.version>7-SNAPSHOT</mwdb.version>
     </properties>
 
     <build>
@@ -20,7 +19,7 @@
            <plugin>
                 <groupId>org.kevoree.mwg.plugins</groupId>
                 <artifactId>mavenplugin</artifactId>
-                <version>${kmf.version}</version>
+                <version>${mwdb.version}</version>
                 <executions>
                     <execution>
                         <id>GenModel</id>
@@ -70,7 +69,7 @@
         <dependency>
             <groupId>org.kevoree.mwg.plugins</groupId>
             <artifactId>ml</artifactId>
-            <version>6-SNAPSHOT</version>
+            <version>${mwdb.version}</version>
         </dependency>
 
     </dependencies>

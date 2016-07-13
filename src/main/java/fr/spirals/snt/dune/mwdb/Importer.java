@@ -1,6 +1,7 @@
 package fr.spirals.snt.dune.mwdb;
 
 import org.mwg.Callback;
+import org.mwg.Type;
 import org.mwg.importer.ImporterActions;
 import org.mwg.task.Task;
 
@@ -16,67 +17,6 @@ import static org.mwg.task.Actions.*;
  * Created by ludovicmouline on 14/06/16.
  */
 public class Importer {
-    /*public static final String CONTEXT_FILE = "context.csv";
-    public static final String METRICS_FILE = "metrics.csv";
-    public static final String TIMERANGE_FILE = "timerange.csv";
-    public static final String USERINPUT_FILE = "userinput.csv";
-
-    public static final String CSV_SEP = ",";
-
-    private static final CSVImporter contextImporter = new CSVImporter();
-    private static final CSVImporter metricsImporter = new CSVImporter();
-    private static final CSVImporter timerangeImporter = new CSVImporter();
-    private static final CSVImporter userinputImporter = new CSVImporter();
-    private static Importer singleton;
-
-    private Importer(){
-        contextImporter.setSeparator(CSV_SEP);
-        contextImporter.mapper().extractTime("{time}","ss");
-        contextImporter.mapper().field("device");
-        contextImporter.mapper().field("SDK_version").rename("sdk_version");
-        contextImporter.mapper().field("API_level").rename("api_level");
-        contextImporter.mapper().field("screen_res");
-        contextImporter.mapper().field("cpu_api");
-        contextImporter.mapper().field("net_type");
-
-        metricsImporter.setSeparator(CSV_SEP);
-        metricsImporter.mapper().field("timeFrame").isDouble();
-
-        timerangeImporter.setSeparator(CSV_SEP);
-        timerangeImporter.mapper().field("startTimestamp");
-        timerangeImporter.mapper().field("endTimestamp");
-
-
-        userinputImporter.setSeparator(CSV_SEP);
-        userinputImporter.mapper().field("timestamp").isDouble();
-        userinputImporter.mapper().field("eventType");
-        userinputImporter.mapper().field("viewId");
-
-    }
-
-    public static void initImport() {
-        if(singleton == null) {
-            singleton = new Importer();
-        }
-    }
-
-    public static void importFile(Graph graph, File folder) {
-        if(folder.exists()) {
-            File[] files = folder.listFiles();
-            for(int i=0;i<files.length;i++) {
-                if(files[i].getName().equals(CONTEXT_FILE)) {
-                    Node context = graph.newNode(0,-3600000);
-                    try {
-                        contextImporter.importToNode(files[i], context, null);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    System.err.println(files[i].getName());
-                }
-            }
-        }
-    }*/
 
     public static final String CONTEXT_FILE = "context.csv";
     public static final String METRICS_FILE = "metrics.csv";
@@ -85,7 +25,6 @@ public class Importer {
 
     public static final String CSV_SEP = ",";
 
-//    private static Task initTask;
     private static final Task contextImporter = newTask();
     private static final Task metricsImporter = newTask();
     private static final Task timerangeImporter = newTask();
@@ -101,6 +40,7 @@ public class Importer {
         this.duneModel = model;
 
         contextImporter
+                .setTime("0")
                 .action(ImporterActions.READLINES,"{{path}}")
                 .foreach(
                         selectObject(line -> !((String)line).startsWith("device")  && !((String)line).isEmpty())
@@ -120,59 +60,72 @@ public class Importer {
                                                 .asVar("taskContext")
                                                 .fromVar("executionNode")
                                                 .add(Execution.CONTEXT,"taskContext")
+                                                .setVar("taskContext",null)
                                 )
-                );
+                )
+                .;
 
         metricsImporter
+                .setTime("{{startTime}}")
                 .setVar("isFirst",true)
-                .setVar("counter",0)
+                .setVar("counter","{{startTime}}")
                 .action(ImporterActions.READLINES,"{{path}}")
-                .foreach(selectObject(line -> !((String)line).startsWith("timeFrame") && !((String)line).isEmpty())
+                .selectObject(line -> !((String)line).startsWith("timeFrame") && !((String)line).isEmpty())
                         .foreach(
                                 then(taskContext -> {
                                     String res = taskContext.resultAsString();
                                     boolean isFirst = (boolean) taskContext.variable("isFirst");
-                                    int counter = (int) taskContext.variable("counter");
+                                    int counter = Integer.parseInt((String) taskContext.variable("counter"));
 
                                     Execution execution = (Execution) taskContext.variable("executionNode");
                                     if(isFirst) {
                                         taskContext.setVariable("isFirst",false);
                                         Metrics metrics = duneModel.newMetrics(0,counter);
                                         metrics.setTimeframe(Double.valueOf(res));
-                                        execution.addToTimeframe(metrics);
-                                    } else {
-                                        Metrics metrics = execution.getTimeframe()[0];
-                                        metrics.jump(counter, new Callback<Metrics>() {
+                                        execution.jump(counter, new Callback<Execution>() {
                                             @Override
-                                            public void on(Metrics future) {
-                                                future.setTimeframe(Double.valueOf(res));
+                                            public void on(Execution jumped) {
+                                                jumped.addToTimeframe(metrics);
                                             }
                                         });
+
+                                    } else {
+                                        execution.jump(counter, new Callback<Execution>() {
+                                            @Override
+                                            public void on(Execution jumped) {
+                                                Metrics metrics = jumped.getTimeframe()[0];
+                                                metrics.jump(counter, new Callback<Metrics>() {
+                                                    @Override
+                                                    public void on(Metrics future) {
+                                                        future.setTimeframe(Double.valueOf(res));
+                                                    }
+                                                });
+                                            }
+                                        });
+
                                     }
 
-                                    taskContext.setVariable("counter",++counter);
+                                    taskContext.setVariable("counter",counter + Integer.parseInt(res) + "");
                                     taskContext.setResult(null);
                                 })
-                        )
-                );
+                        );
 
         timerangeImporter
                 .action(ImporterActions.READLINES,"{{path}}")
-                .foreach(selectObject(oLine -> !((String)oLine).startsWith("st") && !((String)oLine).isEmpty())
+                .selectObject(oLine -> !((String)oLine).startsWith("st") && !((String)oLine).isEmpty())
                             .foreach(
                                     split(",")
-                                            .then(taskContext -> {
-                                                String[] res = taskContext.resultAsStringArray();
-                                                TimeRange timeRange = duneModel.newTimerange(0,0);
-                                                timeRange.setStarttime(Double.valueOf(res[0]));
-                                                timeRange.setEndtime(Double.valueOf(res[1]));
-                                                taskContext.setResult(timeRange);
-                                            })
+                                            .asVar("res")
+                                            .newTypedNode(TimeRange.NODE_NAME)
+                                            .setProperty(TimeRange.STARTTIME, Type.DOUBLE,"{{res[0]}}")
+                                            .setProperty(TimeRange.ENDTIME, Type.DOUBLE,"{{res[1]}}")
                                             .asVar("timeRange")
                                             .fromVar("executionNode")
                                             .add(Execution.TIMERANGE,"timeRange")
-                            )
-                );
+                                            .setVar("startTime","{{res[0]}}")
+                                            .setVar("timeRange",null)
+                                            .setVar("res",null)
+                            );
 
 
         userinputImporter
@@ -180,34 +133,44 @@ public class Importer {
                 .foreach(selectObject(oLine -> !((String)oLine).startsWith("timestamp") && !((String)oLine).isEmpty())
                             .foreach(
                                     split(",")
-                                            .then(taskContext -> {
+                                            /*.then(taskContext -> {
                                                 String[] res = taskContext.resultAsStringArray();
                                                 UserInput userInput = duneModel.newUserinput(0,Long.valueOf(res[0]));
                                                 userInput.setEventtype(res[1]);
                                                 userInput.setViewid(res[2]);
                                                 taskContext.setResult(userInput);
-                                            })
+                                            })*/
+                                            .asVar("res")
+                                            .newTypedNode(UserInput.NODE_NAME)
+                                            .setProperty(UserInput.EVENTTYPE,Type.STRING,"{{res[1]}}")
+                                            .setProperty(UserInput.VIEWID,Type.STRING,"{{res[2]}}")
                                             .asVar("userInput")
                                             .fromVar("executionNode")
                                             .add(Execution.USERINPUT,"userInput")
-                                            .print("{{result}}")
                             )
                 );
 
 
 
         importTask
-                .then(taskContext -> {
-                    Execution execution = duneModel.newExecution(0,0);
-                    execution.setIdexecution("execution1"); //fixme
-                    taskContext.setResult(execution);
-                })
+                .setWorld("0")
+                .setTime("0")
+                .setVar("executionId","execution1")
+                .newTypedNode(Execution.NODE_NAME)
+                .setProperty(Execution.IDEXECUTION,Type.STRING,"executionId")
+                .indexNode(DuneModel.IDX_EXECUTIONS,Execution.IDEXECUTION)
                 .asVar("executionNode")
                 .action(ImporterActions.READFILES, "{{folder}}")
+                .asVar("filesPath")
+                .selectObject(oFile -> ((String)oFile).endsWith(TIMERANGE_FILE))
+                .then(context -> context.setResult(context.resultAsObjectArray()[0]))
+                .asVar("path")
+                .executeSubTask(timerangeImporter)
+                .fromVar("filesPath")
+                .selectObject(oFile -> !((String)oFile).endsWith(TIMERANGE_FILE))
                 .foreach(
                          asVar("path")
-                         .ifThen(context -> ((String)context.variable("path")).endsWith(CONTEXT_FILE),
-                                        contextImporter)
+                         .ifThen(context -> ((String)context.variable("path")).endsWith(CONTEXT_FILE), contextImporter)
                          .ifThen(context -> ((String)context.variable("path")).endsWith(METRICS_FILE),
                                  metricsImporter)
                          .ifThen(context -> ((String)context.variable("path")).endsWith(TIMERANGE_FILE),
@@ -232,15 +195,32 @@ public class Importer {
         initVar.put("folder",folder.getAbsolutePath());
         importTask.executeWith(duneModel.graph(), initVar, null, false,null);
 
-        Execution[] executions = duneModel.findAllExecutions(0,1001);
-        for(int i=0;i<executions.length;i++) {
-            System.out.println(executions[i]);
-            System.out.println("\tContext: " + Arrays.toString(executions[i].getContext()));
-            System.out.println("\tTimeFrame: " + Arrays.toString(executions[i].getTimeframe()));
-//            System.out.println("\t\t" + executions[i].getTimeframe()[0].getTimeframe());
-            System.out.println("\tTimeRange: " + Arrays.toString(executions[i].getTimerange()));
-            System.out.println("\tUserInput: " + Arrays.toString(executions[i].getUserinput()));
+        for(int t=999;t<=1071;t++) {
+            System.out.println("Time: " + t);
+            Execution[] executions = duneModel.findAllExecutions(0, t);
+            for (int i = 0; i < executions.length; i++) {
+                System.out.println(executions[i]);
+                System.out.println("\tContext: " + Arrays.toString(executions[i].getContext()));
+                System.out.println("\tTimeFrame: " + Arrays.toString(executions[i].getTimeframe()));
+                System.out.println("\tTimeRange: " + Arrays.toString(executions[i].getTimerange()));
+                System.out.println("\tUserInput: " + Arrays.toString(executions[i].getUserinput()));
+            }
+            System.out.println();
         }
+
+        /*duneModel.graph().lookup(0, 0, n.id(), new Callback<Node>() {
+            @Override
+            public void on(Node result) {
+                System.out.println(result.getClass());
+            }
+        });*/
+
+//        print("{{= 1000 + 12}}")
+//                .execute(duneModel.graph(),null);
+
+
+
+
     }
 
 
