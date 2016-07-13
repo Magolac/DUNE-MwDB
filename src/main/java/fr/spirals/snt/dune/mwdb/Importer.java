@@ -44,7 +44,7 @@ public class Importer {
                 .foreach(
                         selectObject(line -> !((String)line).startsWith("device")  && !((String)line).isEmpty())
                                 .foreach(
-                                        split(",")
+                                        split(CSV_SEP)
                                                 .asVar("res")
                                                 .newTypedNode(Context.NODE_NAME)
                                                 .setProperty(Context.DEVICE,Type.STRING,"{{res[0]}}")
@@ -109,7 +109,7 @@ public class Importer {
                 .action(ImporterActions.READLINES,"{{path}}")
                 .selectObject(oLine -> !((String)oLine).startsWith("st") && !((String)oLine).isEmpty())
                             .foreach(
-                                    split(",")
+                                    split(CSV_SEP)
                                             .asVar("res")
                                             .newTypedNode(TimeRange.NODE_NAME)
                                             .setProperty(TimeRange.STARTTIME, Type.DOUBLE,"{{res[0]}}")
@@ -127,7 +127,7 @@ public class Importer {
                 .action(ImporterActions.READLINES,"{{path}}")
                 .selectObject(oLine -> !((String)oLine).startsWith("timestamp") && !((String)oLine).isEmpty())
                 .foreach(
-                        split(",")
+                        split(CSV_SEP)
                                 .asVar("res")
                                 .fromVar("executionNode")
                                 .jump("{{res[0]}}")
